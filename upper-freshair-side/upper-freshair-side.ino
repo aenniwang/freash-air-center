@@ -19,7 +19,8 @@
 #include <MirfHardwareSpiDriver.h>
 #include "freashair.h"
 
-unsigned char header_status;
+unsigned char heater_status;
+unsigned char fan_speed;
 
 void setup_24l01(){
 
@@ -59,15 +60,17 @@ void setup_24l01(){
 }
 
 void setup_heater(){
-	pinMode(HEATER_PIN0,  OUTPUT);
-	pinMode(HEATER_PIN1,  OUTPUT);
-	pinMode(HEATER_PIN2,  OUTPUT);
-	delay(10);
   digitalWrite(HEATER_PIN0, HIGH);
   digitalWrite(HEATER_PIN1, HIGH);
   digitalWrite(HEATER_PIN2, HIGH);
-
-	header_status = 0;
+  digitalWrite(FANSPEED_PIN,HIGH);
+  delay(10);
+	pinMode(HEATER_PIN0,  OUTPUT);
+	pinMode(HEATER_PIN1,  OUTPUT);
+	pinMode(HEATER_PIN2,  OUTPUT);
+  pinMode(FANSPEED_PIN, OUTPUT);
+	heater_status = 0;
+  fan_speed = FAN_SPEED_LOW;
 }
 
 void setup(){
@@ -78,7 +81,7 @@ void setup(){
 	Serial.println("Setup 24l01.");
 	setup_24l01();
 }
-
+    static byte idle;
 void loop(){
 	/*
 	 * A buffer to store the data.
@@ -92,26 +95,24 @@ void loop(){
 	unsigned char data[4];
 	unsigned char checksum;
 
-	/*
-	 * If a packet has been recived.
-	 *
-	 * isSending also restores listening mode when it 
-	 * transitions from true to false.
-	 */
-
 	if(!Mirf.isSending() && Mirf.dataReady()){
-		/*
-		 * Get load the packet into the buffer.
-		 */
+    delay(50);
+    static unsigned int count;
+    count++;
 		Mirf.getData((byte*)data);
 		checksum = data[0]+data[1]+data[2];
-		Serial.println("Get data: ");
-		Serial.println(data[0]);
-		Serial.println(data[1]);
-		Serial.println(data[2]);
+		Serial.print("Get data ");    
+		Serial.print("[");   
+      Serial.print(count);
+		Serial.print("]: ");
+		Serial.print(data[0]);
+    Serial.print(" - ");
+		Serial.print(data[1]);
+        Serial.print(" - ");
+		Serial.print(data[2]);
+        Serial.print(" - ");
 		Serial.println(data[3]);
-
-
+    Mirf.flushRx();
 		if(checksum != data[3]){
 			Serial.println("Invalid command data");
 			return;
@@ -124,34 +125,51 @@ void loop(){
 						digitalWrite(HEATER_PIN0, HIGH);
 						digitalWrite(HEATER_PIN1, HIGH);
 						digitalWrite(HEATER_PIN2, LOW);
-						header_status=1;
+						heater_status=1;
 						break;
 					case HEATER_2_SET:
 						digitalWrite(HEATER_PIN0, LOW);
 						digitalWrite(HEATER_PIN1, LOW);
 						digitalWrite(HEATER_PIN2, HIGH);
-						header_status=2;
+						heater_status=2;
             break;
 					case HEATER_3_SET:
 						digitalWrite(HEATER_PIN0, LOW);
 						digitalWrite(HEATER_PIN1, LOW);
 						digitalWrite(HEATER_PIN2, LOW);
-						header_status=3;
+						heater_status=3;
 						break;
 					case HEATER_0_SET:
 					default:
 						digitalWrite(HEATER_PIN0, HIGH);
 						digitalWrite(HEATER_PIN1, HIGH);
 						digitalWrite(HEATER_PIN2, HIGH);
-						header_status=0;
+						heater_status=0;
 						break;
 				}
 				data[2]=CMD_STATUS_OK;
 				break;
 			case CMD_GET_HEATER:
-				data[1]=header_status;
+				data[1]=heater_status;
 				data[2]=CMD_STATUS_OK;
 				break;
+      case CMD_SET_FANSPEED:
+        if(data[1]){
+          // high speed
+          digitalWrite(FANSPEED_PIN,LOW);
+            fan_speed = FAN_SPEED_HIGH;
+        }
+        else
+        {
+            digitalWrite(FANSPEED_PIN,HIGH);
+            fan_speed = FAN_SPEED_LOW;
+        }
+        data[2]=CMD_STATUS_OK;
+        break;
+       case CMD_GET_FANSPEED:
+       data[1]=fan_speed;
+       data[2]=CMD_STATUS_OK;
+       break;
 			default:
 				data[2]=CMD_STATUS_INVALID;
 				break;
@@ -166,5 +184,19 @@ void loop(){
 		 * Send the data back to the client.
 		 */
 		Mirf.send((byte*)data);
-	}
-}
+   idle=0;
+  	}
+  	/*
+   else{
+    delay(100);
+   // Serial.println("No data in 500ms");
+    idle++;
+    if(idle>200){
+      Serial.println("Reset Link");
+      setup_24l01();
+      idle=0;
+    }
+    
+   }
+   */
+  }
