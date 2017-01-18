@@ -44,37 +44,55 @@ http://www.arduino.cc/en/Tutorial/LiquidCrystal
 #include <MirfHardwareSpiDriver.h>
 #include "freashair.h"
 // initialize the library with the numbers of the interface pins
-LiquidCrystal lcd(9, 10, 5, 4, 3, 2);
+//LiquidCrystal lcd(9, 10, 5, 4, 3, 2);
+LiquidCrystal lcd(14,10, 2, 3, 4, 5);
 
-#define KEY_SELECT 14
-#define KEY_COMFIRM 15
+#define PIN_KEY1 17
+#define PIN_KEY2 16
+#define LCD_BACKLIGH 6
 
+#define LCD_SCEAN_MAIN 0
+/* if SET is pressed , then <HEATEER LVL> blinking 
+    show
+    | HEATER LVL  FAN SPD   |
+    | OK            NEXT    |
+    if cancel go to LCD_SCEAN_MAIN
+*/
+#define LCD_SCEAN_SET_SELECT_HEATLVL 1
+#define LCD_SCEAN_SET_SELECT_FANSPD 2 
+/*  if HEATER_LVL chosen
+    |HEATER LVL: --#        |
+    | CHANGE        CANCEL  |
+    if CANCEL goto LCD_SCEAN_SET_SELECT
+*/
+#define LCD_SCEAN_SET_HEATERLVL 3
+#define LCD_SCEAN_SET_FANSPEED 4 
+
+#define KEY1 1 
+#define KEY2 2 
+#define KEY12 3
+
+byte scean ;
 unsigned char heater_status;
 unsigned char fan_status;
 unsigned char comm_err;
+byte blklight_count;
+byte timer_issue_cmd; 
+
 void setup_24l01(){
     Mirf.spi = &MirfHardwareSpi;
     Mirf.init();
+    Mirf.configRegister(RF_SETUP,0x27);//250Kbps
     Mirf.setRADDR((byte *)"clie1");
     Mirf.payload = PAYLOAD;
+    Mirf.channel = 39;
     Mirf.config();
 }
 
 void update_lcd_machine_status(){
     // Print a message to the LCD.
-    static byte error_count;
     lcd.setCursor(0,0);
-    if(comm_err){
-        error_count++;
-        lcd.print("-  Link Error -");
-        if(error_count > 5){
-        delay(100);
-        setup_24l01();
-        delay(100);
-        error_count=0;
-        }
-        return;
-    }
+
     switch(heater_status){
         case HEATER_1_SET:
             lcd.print("HEAT:--#");
@@ -96,10 +114,101 @@ void update_lcd_machine_status(){
         lcd.print("FAN:LOW ");
 }
 
+void update_lcd_status(){
+  switch(scean){
+      case LCD_SCEAN_MAIN: 
+          lcd.setCursor(0,0);
+          switch(heater_status){
+              case HEATER_1_SET:
+                  lcd.print("   --#  ");
+                  break;
+              case HEATER_2_SET:
+                  lcd.print("   -##  ");
+                  break;
+              case HEATER_3_SET:
+                  lcd.print("   ###  ");
+                  break;
+              default:
+                  lcd.print("   ---  ");
+                  break;
+          }
+          lcd.setCursor(8,0);
+          if(fan_status == FAN_SPEED_HIGH)
+              lcd.print("  HIGH  ");
+          else
+              lcd.print("  LOW   ");
+
+          lcd.setCursor(0,1);
+          lcd.print("            SET ");
+          break;
+
+      case LCD_SCEAN_SET_SELECT_HEATLVL:
+          lcd.setCursor(0,0);
+          lcd.print(" set heater lvl ");
+
+          lcd.setCursor(0,1);
+          lcd.print(" NEXT        OK ");
+          break;
+
+        case LCD_SCEAN_SET_SELECT_FANSPD:
+          lcd.setCursor(0,0);
+          lcd.print(" set fan speed  ");
+
+          lcd.setCursor(0,1);
+          lcd.print(" NEXT        OK ");
+          break;
+
+    case LCD_SCEAN_SET_HEATERLVL:
+          lcd.setCursor(0,0);
+          lcd.print("HEAT LVL: ");
+          lcd.setCursor(10,0);
+          switch(heater_status){
+              case HEATER_1_SET:
+                  lcd.print("   --#  ");
+                  break;
+              case HEATER_2_SET:
+                  lcd.print("   -##  ");
+                  break;
+              case HEATER_3_SET:
+                  lcd.print("   ###  ");
+                  break;
+              default:
+                  lcd.print("   ---  ");
+                  break;
+          }
+          lcd.setCursor(0,1);
+          lcd.print(" MAIN       CHG ");
+          break;
+
+    case LCD_SCEAN_SET_FANSPEED:
+          lcd.setCursor(0,0);
+          lcd.print("FAN SPD: ");
+          lcd.setCursor(9,0);
+          if(fan_status == FAN_SPEED_HIGH)
+              lcd.print("  HIGH  ");
+          else
+              lcd.print("  LOW   ");
+
+          lcd.setCursor(0,1);
+          lcd.print(" MAIN       CHG ");
+          break;
+    default:
+           break;
+  }
+
+  if(blklight_count>100){
+      blklight_count =0;
+      digitalWrite(LCD_BACKLIGH,LOW);
+      scean = LCD_SCEAN_MAIN;
+  }
+}
+
+
 void setup_1602() {
     // set up the LCD's number of columns and rows:
     lcd.begin(16, 2);
-    update_lcd_machine_status();
+    pinMode(LCD_BACKLIGH,OUTPUT);
+    digitalWrite(LCD_BACKLIGH,HIGH);
 }
 
 byte dev24l01_send_cmd(byte *data){
@@ -175,10 +284,9 @@ byte command_processing(byte cmd, byte arg, byte sts){
 }
 
 void setup_keyboard(){
-    pinMode(KEY_SELECT,INPUT_PULLUP);
-    pinMode(KEY_SELECT,INPUT_PULLUP);
+    pinMode(PIN_KEY1,INPUT_PULLUP);
+    pinMode(PIN_KEY2,INPUT_PULLUP);
 }
-
 
 void setup(){
     Serial.begin(9600);
@@ -194,100 +302,136 @@ void setup(){
     heater_status = 0;
     fan_status=0;
     comm_err = 1;
+    timer_issue_cmd=255;
+    blklight_count = 0;
+}
+
+void reset(){
+    fan_status = FAN_SPEED_LOW;
+    heater_status = HEATER_0_SET;
+    Serial.println("Setup 24L01");
+    setup_24l01();
+    Serial.println("Setup Keyboard");
+    setup_keyboard();
+    heater_status = 0;
+    fan_status=0;
+    comm_err = 1;
+    timer_issue_cmd=255;
+    blklight_count = 0;
 }
 /* Show 
     |FAN_SPEED  HEATER Level|
     |  SET                  |
     if 5 seconds no action on KEY, return to this scean
 */
-#define LCD_SCEAN_MAIN 0
-/* if SET is pressed , then <HEATEER LVL> blinking 
-    show
-    | HEATER LVL  FAN SPD   |
-    | OK            NEXT    |
-    if cancel go to LCD_SCEAN_MAIN
-*/
-#define LCD_SCEAN_SET_SELECT_HEATLVL 1
-#define LCD_SCEAN_SET_SELECT_FANSPD 2 
-/*  if HEATER_LVL chosen
-    |HEATER LVL: --#        |
-    | CHANGE        CANCEL  |
-    if CANCEL goto LCD_SCEAN_SET_SELECT
-*/
-#define LCD_SCEAN_SET_HEATERLVL 3
-#define LCD_SCEAN_SET_FANSPEED 4 
-
-#define KEY1 0
-#define KEY2 1
-#define KEY12 3
-
-byte scean ;
 byte scan_key(){
-    return 0;
+    byte key=0;
+//#define KEY_FROM_UART 1
+#ifdef KEY_FROM_UART
+    while(Serial.available()>0)
+        Serial.read();
+
+    Serial.print("Key (1-KEY1, 2-KEY2): ");
+
+    while(Serial.available()<=0);
+    key=Serial.read();
+    if(key>='0' && key<='2')
+        key-= '0';
+    else
+        key= 0;
+
+    if(key==KEY1)
+        Serial.println("KEY1");
+    else if(key==KEY2)
+        Serial.println("KEY2");
+    else
+        Serial.println("UNKnown KEY");
+    return key;
+#else
+    if(digitalRead(PIN_KEY2)==LOW){
+        delay(10);
+        if(digitalRead(PIN_KEY2)==LOW){
+            delay(10);
+            if(digitalRead(PIN_KEY2)==LOW){
+                key=KEY2;
+            }
+        }
+    }
+    if(digitalRead(PIN_KEY1)==LOW){
+        delay(10);
+        if(digitalRead(PIN_KEY1)==LOW){
+            delay(10);
+            if(digitalRead(PIN_KEY1)==LOW){
+                key=KEY1;
+            }
+        }
+    }
+  //  delay(100);
+    //Serial.print("KEY");
+    //Serial.println(key);
+    return key;
+#endif
 }
 
 void handling_key(byte key){
     switch(scean){
     /*
         |FAN_SPEED  HEATER Level|
-        |  SET                  |
+        |                SET    |
     */
     case LCD_SCEAN_MAIN:
         switch(key){
             case KEY1:
+                break;
+
+            case KEY2:
                 /*
                    | HEATER LVL  FAN SPD   |
                    |    NEXT          OK   |
                  */
                 scean=LCD_SCEAN_SET_SELECT_HEATLVL;
                 break;
-            case KEY2:
-                              break;
             default:
                 break;
         }
         break;
+
     case LCD_SCEAN_SET_SELECT_HEATLVL:
         switch(key){
             case KEY1:
                 scean=LCD_SCEAN_SET_SELECT_FANSPD;
                 break;
             case KEY2:
-                /*
-                   |HEATER LVL: --#        |
-                   | CHANGE        CANCEL  |
-                 */
                 scean=LCD_SCEAN_SET_HEATERLVL;
                 break;
             default:
                 break;
         }
         break;
+
     case LCD_SCEAN_SET_SELECT_FANSPD:
         switch(key){
             case KEY1:
                 scean=LCD_SCEAN_SET_SELECT_HEATLVL;
                 break;
             case KEY2:
-                /*
-                   |FAN SPEED:   LOW       |
-                   | CHANGE        CANCEL  |
-                 */
                 scean=LCD_SCEAN_SET_FANSPEED;
                 break;
             default:
                 break;
         }
         break;
+
     case LCD_SCEAN_SET_HEATERLVL:
         switch(key){
             case KEY1:
+                scean=LCD_SCEAN_MAIN;
+                break;
+            case KEY2:
                 scean=LCD_SCEAN_SET_HEATERLVL;
                 heater_status ++;
                 heater_status &= 3;
-                break;
-            case KEY2:
-                scean=LCD_SCEAN_SET_SELECT_HEATLVL;
+                command_processing(CMD_SET_HEATER,heater_status,0);
                 break;
             default:
                 break;
@@ -296,14 +440,16 @@ void handling_key(byte key){
     case LCD_SCEAN_SET_FANSPEED:
         switch(key){
             case KEY1:
+                scean=LCD_SCEAN_MAIN;
+                break;
+            case KEY2:
                 scean=LCD_SCEAN_SET_FANSPEED;
                 if(fan_status == FAN_SPEED_HIGH)
                       fan_status = FAN_SPEED_LOW;
                 else
                       fan_status = FAN_SPEED_HIGH;
-                break;
-            case KEY2:
-                scean=LCD_SCEAN_SET_SELECT_FANSPD;
+
+                command_processing(CMD_SET_FANSPEED,fan_status,0);
                 break;
             default:
                 break;
@@ -315,102 +461,45 @@ void handling_key(byte key){
 }
 
 void loop() {
-    byte char0,char1;
-    static byte cmd,arg,sts;
-    byte ret;
+    static  byte error_count;
     byte key;
-    command_processing(CMD_GET_HEATER,0,0);
-  //  command_processing(CMD_GET_FANSPEED,0,0);
-    update_lcd_machine_status();
-    
+
+    if(timer_issue_cmd > 15){
+        timer_issue_cmd = 0;
+        command_processing(CMD_GET_HEATER,0,0);
+        command_processing(CMD_GET_FANSPEED,0,0);
+    }
+
     /*
      * Check Key status
      */
-    if(key=scan_key()){
-    /* Any key has been pressed */
-    handling_key(key);
+     key=scan_key();
+    if(key){
+        /* Any key has been pressed */
+        handling_key(key);
+        digitalWrite(LCD_BACKLIGH, HIGH);
+        blklight_count= 0;
+        timer_issue_cmd=255;
     }
 
-#if 0
-    /*
-     * Clear Input bufer
-     */
-    while(Serial.available()>0)
-        Serial.read();
+    update_lcd_status();
 
-    Serial.println("Please Input cmd/arg/sts");
-
-    while(Serial.available()<2);
-    char0=Serial.read();
-    if(char0>='0' || char0<='9')
-        char0 -= '0';
-    else
-        char0 -= 'a';
-    char1=Serial.read();
-    if(char1>='0' || char1<='9')
-        char1 -= '0';
-    else
-        char1 -= 'a';
-    Serial.println(char0);
-    Serial.println(char1);
-    cmd=(char0<<4|char1);
-
-    while(Serial.available()<2);
-    char0=Serial.read();
-    if(char0>='0' || char0<='9')
-        char0 -= '0';
-    else
-        char0 -= 'a';
-    char1=Serial.read();  
-    if(char1>='0' || char1<='9')
-        char1 -= '0';
-    else
-        char1 -= 'a';
-    arg=(char0<<4|char1);
-    while(Serial.available()<2);
-    char0=Serial.read();
-    if(char0>='0' || char0<='9')
-        char0 -= '0';
-    else
-        char0 -= 'a';
-    char1=Serial.read();
-    if(char1>='0' || char1<='9')
-        char1 -= '0';
-    else
-        char1 -= 'a';
-    sts=(char0<<4|char1);
-
-    Serial.print("CMD ARG STS = ");
-
-    Serial.print(cmd);
-    Serial.print(" ");
-    Serial.print(arg);
-    Serial.print(" ");
-    Serial.print(sts);
-    Serial.println(" ");
-#else
-  static byte count=100 ;
-    cmd = 0x80;
-    count++;
-  
-    #if 0
-    arg++;
-    if(arg>3)
-        arg=0;
-    #else
-        arg=2;
-        #endif
-    sts=0;
-  
-#endif 
-if(count>2)
-    {
-   // ret = command_processing(cmd,arg,sts);
-    count=0;
-      }
-      Serial.print( count);
-    Serial.print("  Return: ");
-    Serial.println(ret );
-    update_lcd_machine_status();
-    delay(1500);
+    if(comm_err){
+        error_count++;
+        lcd.setCursor(0,0);
+        lcd.print("-  Link Error  -");
+        delay(1500);
+        if(error_count > 5){
+            lcd.setCursor(0,1);
+            lcd.print(" Reseting Board ");
+            reset();
+            delay(2000);
+            error_count=0;
+        }
+        return;
+    }
+    blklight_count ++;
+    
+    timer_issue_cmd ++;
+    delay(100);
 }

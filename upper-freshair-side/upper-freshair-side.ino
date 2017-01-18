@@ -40,7 +40,8 @@ void setup_24l01(){
 	 */
 
 	Mirf.setRADDR((byte *)"serv1");
-
+    Mirf.configRegister(RF_SETUP,0x27);//250Kbps
+    Mirf.channel = 39;
 	/*
 	 * Set the payload length to sizeof(unsigned long) the
 	 * return type of millis().
@@ -60,8 +61,8 @@ void setup_24l01(){
 }
 
 void setup_heater(){
-  digitalWrite(HEATER_PIN0, HIGH);
-  digitalWrite(HEATER_PIN1, HIGH);
+  digitalWrite(HEATER_PIN0, LOW);
+  digitalWrite(HEATER_PIN1, LOW);
   digitalWrite(HEATER_PIN2, HIGH);
   digitalWrite(FANSPEED_PIN,HIGH);
   delay(10);
@@ -69,7 +70,7 @@ void setup_heater(){
 	pinMode(HEATER_PIN1,  OUTPUT);
 	pinMode(HEATER_PIN2,  OUTPUT);
   pinMode(FANSPEED_PIN, OUTPUT);
-	heater_status = 0;
+	heater_status = HEATER_2_SET;
   fan_speed = FAN_SPEED_LOW;
 }
 
