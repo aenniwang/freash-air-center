@@ -111,6 +111,13 @@ void loop(){
 
     power_timer--;
 
+    if (power == POWER_OFF) {
+        digitalWrite(HEATER_PIN0, HIGH);
+        digitalWrite(HEATER_PIN1, HIGH);
+        digitalWrite(HEATER_PIN2, HIGH);
+        heater_status=0;
+    }
+
     if (!power_timer) {
         Serial.print("Power changed from ");
         Serial.print(power ? "OFF" : "ON");
