@@ -52,14 +52,11 @@ LiquidCrystal lcd(14,10, 2, 3, 4, 5);
 #define LCD_BACKLIGH 6
 
 #define LCD_SCEAN_MAIN 0
-/* if SET is pressed , then <HEATEER LVL> blinking 
-    show
-    | HEATER LVL  FAN SPD   |
-    | OK            NEXT    |
-    if cancel go to LCD_SCEAN_MAIN
+/*
+    |### OFF 50/50 10 |
+    |            SET  |
 */
-#define LCD_SCEAN_SET_SELECT_HEATLVL 1
-#define LCD_SCEAN_SET_SELECT_FANSPD 2 
+
 /*  if HEATER_LVL chosen
     |HEATER LVL: --#        |
     | CHANGE        CANCEL  |
@@ -67,6 +64,9 @@ LiquidCrystal lcd(14,10, 2, 3, 4, 5);
 */
 #define LCD_SCEAN_SET_HEATERLVL 3
 #define LCD_SCEAN_SET_FANSPEED 4 
+#define LCD_SCEAN_SET_POWER 5
+#define LCD_SCEAN_SET_POWER_PERIOD_ON 6
+#define LCD_SCEAN_SET_POWER_PERIOD_OFF 7
 
 #define KEY1 1 
 #define KEY2 2 
@@ -74,7 +74,11 @@ LiquidCrystal lcd(14,10, 2, 3, 4, 5);
 
 byte scean ;
 unsigned char heater_status;
-unsigned char fan_status;
+unsigned char power_status;
+unsigned short power_period_on;
+unsigned short power_period_off;
+unsigned short power_timer;
+
 unsigned char comm_err;
 byte blklight_count;
 byte timer_issue_cmd; 
@@ -89,73 +93,67 @@ void setup_24l01(){
     Mirf.config();
 }
 
-void update_lcd_machine_status(){
-    // Print a message to the LCD.
-    lcd.setCursor(0,0);
-
-    switch(heater_status){
-        case HEATER_1_SET:
-            lcd.print("HEAT:--#");
-            break;
-        case HEATER_2_SET:
-            lcd.print("HEAT:-##");
-            break;
-        case HEATER_3_SET:
-            lcd.print("HEAT:###");
-            break;
-        default:
-            lcd.print("HEAT:---");
-            break;
-    }
-    lcd.setCursor(8,0);
-    if(fan_status == FAN_SPEED_HIGH)
-        lcd.print("FAN:HIGH");
-    else
-        lcd.print("FAN:LOW ");
-}
-
 void update_lcd_status(){
   switch(scean){
       case LCD_SCEAN_MAIN: 
+    /*
+    |### OFF 50/50 10 |
+    |            SET  |
+    */
+
           lcd.setCursor(0,0);
           switch(heater_status){
               case HEATER_1_SET:
-                  lcd.print("   --#  ");
+                  lcd.print("--#  ");
                   break;
               case HEATER_2_SET:
-                  lcd.print("   -##  ");
+                  lcd.print("-##  ");
                   break;
               case HEATER_3_SET:
-                  lcd.print("   ###  ");
+                  lcd.print("###  ");
                   break;
-              default:
-                  lcd.print("   ---  ");
+              case HEATER_0_SET:
+                  lcd.print("---  ");
                   break;
+                  default:
+                  lcd.print("FALT");
           }
-          lcd.setCursor(8,0);
-          if(fan_status == FAN_SPEED_HIGH)
-              lcd.print("  HIGH  ");
-          else
-              lcd.print("  LOW   ");
 
+          lcd.setCursor(4,0);
+          switch(power_status) {
+            case POWER_ON:
+                lcd.print(" ON ");
+                break;
+            case POWER_OFF:
+                lcd.print("OFF ");
+                break;
+            default:
+                lcd.print("ERR ");
+          }
+
+          lcd.setCursor(8,0);
+	  if (power_period_on>100)
+		  lcd.print("EE");
+	  else
+		  lcd.print(power_period_on);
+
+	  lcd.print("/");
+
+	  if (power_period_off>100)
+		  lcd.print("EE");
+	  else
+		  lcd.print(power_period_off);
+
+	  lcd.print(" ");
+
+	  if (power_timer>100)
+		  lcd.print("EE");
+	  else
+		  lcd.print(power_timer);
+    lcd.print(" ");
+    
           lcd.setCursor(0,1);
           lcd.print("            SET ");
-          break;
-
-      case LCD_SCEAN_SET_SELECT_HEATLVL:
-          lcd.setCursor(0,0);
-          lcd.print(" set heater lvl ");
-
-          lcd.setCursor(0,1);
-          lcd.print(" NEXT        OK ");
-          break;
-
-        case LCD_SCEAN_SET_SELECT_FANSPD:
-          lcd.setCursor(0,0);
-          lcd.print(" set fan speed  ");
-
-          lcd.setCursor(0,1);
-          lcd.print(" NEXT        OK ");
           break;
 
     case LCD_SCEAN_SET_HEATERLVL:
@@ -177,17 +175,53 @@ void update_lcd_status(){
                   break;
           }
           lcd.setCursor(0,1);
-          lcd.print(" MAIN       CHG ");
+          lcd.print(" N:POWER    CHG ");
           break;
 
-    case LCD_SCEAN_SET_FANSPEED:
+    case LCD_SCEAN_SET_POWER:
           lcd.setCursor(0,0);
-          lcd.print("FAN SPD: ");
-          lcd.setCursor(9,0);
-          if(fan_status == FAN_SPEED_HIGH)
-              lcd.print("  HIGH  ");
+          lcd.print("POWER:");
+          lcd.setCursor(8,0);
+
+          switch(power_status) {
+            case POWER_ON:
+                lcd.print("      ON");
+                break;
+            case POWER_OFF:
+                lcd.print("     OFF");
+                break;
+            default:
+                lcd.print("     ERR");
+          }
+
+          lcd.setCursor(0,1);
+          lcd.print(" N:TM_ON    CHG ");
+
+          break;
+
+    case LCD_SCEAN_SET_POWER_PERIOD_ON:
+          lcd.setCursor(0,0);
+          lcd.print("PERIOD ON: ");
+          lcd.setCursor(14,0);
+
+          if (power_period_on>100)
+              lcd.print("EE");
           else
-              lcd.print("  LOW   ");
+              lcd.print(power_period_on);
+
+          lcd.setCursor(0,1);
+          lcd.print(" N:TM_OF    CHG ");
+          break;
+
+    case LCD_SCEAN_SET_POWER_PERIOD_OFF:
+          lcd.setCursor(0,0);
+          lcd.print("PERIOD OFF: ");
+          lcd.setCursor(14,0);
+
+          if (power_period_off>100)
+              lcd.print("EE");
+          else
+              lcd.print(power_period_off);
 
           lcd.setCursor(0,1);
           lcd.print(" MAIN       CHG ");
@@ -227,7 +261,6 @@ byte dev24l01_send_cmd(byte *data){
   //  Serial.println("Waitforready");
    // Serial.flush();
     while(!Mirf.dataReady()){
-         if(millis()>1000)  Serial.println(millis());
         Serial.flush();
         if ( ( millis() - time ) > 1000 ) {
             Serial.println("Timeout on response from server!");
@@ -246,10 +279,17 @@ byte dev24l01_send_cmd(byte *data){
         Serial.println("Error in get command status.");
         return CMD_STATUS_ERR;
     }
-    if(data[0]==CMD_GET_HEATER || data[0] == CMD_GET_FANSPEED)
+
+    if(data[0] == CMD_GET_HEATER ||
+    data[0] == CMD_GET_POWER ||
+    data[0] == CMD_GET_POWER_PERIOD_ON ||
+    data[0] == CMD_GET_POWER_PERIOD_OFF ||
+    data[0] == CMD_GET_POWER_TIMER)
        data[1]=data_ret[1];
+
+    Mirf.flushRx();
     return data_ret[2];
-} 
+}
 
 byte command_processing(byte cmd, byte arg, byte sts){
     byte data[4];
@@ -269,12 +309,34 @@ byte command_processing(byte cmd, byte arg, byte sts){
                 heater_status = data[1];
             }
             break;
-        case CMD_GET_FANSPEED:
-        case CMD_SET_FANSPEED:
-         ret = dev24l01_send_cmd(data);
-            if(ret == CMD_STATUS_OK)
-                fan_status = data[1];
-            break;
+
+	case CMD_SET_POWER:
+	case CMD_GET_POWER:
+            ret = dev24l01_send_cmd(data);
+	    if (ret == CMD_STATUS_OK)
+	        power_status = data[1];
+	    break;
+
+	case CMD_GET_POWER_PERIOD_ON:
+	case CMD_SET_POWER_PERIOD_ON:
+            ret = dev24l01_send_cmd(data);
+	    if (ret == CMD_STATUS_OK)
+	        power_period_on = data[1];
+	    break;
+
+	case CMD_GET_POWER_PERIOD_OFF:
+	case CMD_SET_POWER_PERIOD_OFF:
+            ret = dev24l01_send_cmd(data);
+	    if (ret == CMD_STATUS_OK)
+	        power_period_off = data[1];
+	    break;
+
+	case CMD_GET_POWER_TIMER:
+            ret = dev24l01_send_cmd(data);
+	    if (ret == CMD_STATUS_OK)
+	        power_timer= data[1];
+	    break;
+	    
         default:
             Serial.println("invalid command");
             ret = CMD_STATUS_ERR;
@@ -291,8 +353,11 @@ void setup_keyboard(){
 void setup(){
     Serial.begin(9600);
     Serial.println("Setup LCD"); 
-    fan_status = FAN_SPEED_LOW;
-    heater_status = HEATER_0_SET;
+    power_status = 0xff;
+    heater_status = 0xff;
+    power_period_on = 0xffff;
+    power_period_off = 0xffff;
+    power_timer = 0xffff;
 
     setup_1602();
     Serial.println("Setup 24L01");
@@ -300,25 +365,28 @@ void setup(){
     Serial.println("Setup Keyboard");
     setup_keyboard();
     heater_status = 0;
-    fan_status=0;
     comm_err = 1;
     timer_issue_cmd=255;
     blklight_count = 0;
 }
 
 void reset(){
-    fan_status = FAN_SPEED_LOW;
-    heater_status = HEATER_0_SET;
+    power_status = 0xff;
+    heater_status = 0xff;
+    power_period_on = 0xffff;
+    power_period_off = 0xffff;
+    power_timer = 0xffff;
+
     Serial.println("Setup 24L01");
     setup_24l01();
     Serial.println("Setup Keyboard");
     setup_keyboard();
     heater_status = 0;
-    fan_status=0;
     comm_err = 1;
     timer_issue_cmd=255;
     blklight_count = 0;
 }
+
 /* Show 
     |FAN_SPEED  HEATER Level|
     |  SET                  |
@@ -375,88 +443,94 @@ byte scan_key(){
 
 void handling_key(byte key){
     switch(scean){
-    /*
-        |FAN_SPEED  HEATER Level|
-        |                SET    |
-    */
-    case LCD_SCEAN_MAIN:
-        switch(key){
-            case KEY1:
-                break;
+        /*
+           |FAN_SPEED  HEATER Level|
+           |                SET    |
+         */
+        case LCD_SCEAN_MAIN:
+            switch(key){
+                case KEY1:
+                    break;
 
-            case KEY2:
-                /*
-                   | HEATER LVL  FAN SPD   |
-                   |    NEXT          OK   |
-                 */
-                scean=LCD_SCEAN_SET_SELECT_HEATLVL;
-                break;
-            default:
-                break;
-        }
-        break;
+                case KEY2:
+                    /*
+                       | HEATER LVL  FAN SPD   |
+                       |    NEXT          OK   |
+                     */
+                    scean=LCD_SCEAN_SET_HEATERLVL;
+                    break;
+                default:
+                    break;
+            }
 
-    case LCD_SCEAN_SET_SELECT_HEATLVL:
-        switch(key){
-            case KEY1:
-                scean=LCD_SCEAN_SET_SELECT_FANSPD;
-                break;
-            case KEY2:
-                scean=LCD_SCEAN_SET_HEATERLVL;
-                break;
-            default:
-                break;
-        }
-        break;
+            break;
 
-    case LCD_SCEAN_SET_SELECT_FANSPD:
-        switch(key){
-            case KEY1:
-                scean=LCD_SCEAN_SET_SELECT_HEATLVL;
-                break;
-            case KEY2:
-                scean=LCD_SCEAN_SET_FANSPEED;
-                break;
-            default:
-                break;
-        }
-        break;
+        case LCD_SCEAN_SET_HEATERLVL:
+            switch(key){
+                case KEY1:
+                    scean=LCD_SCEAN_SET_POWER;
+                    break;
+                case KEY2:
+                    scean=LCD_SCEAN_SET_HEATERLVL;
+                    heater_status ++;
+                    heater_status &= 3;
+                    command_processing(CMD_SET_HEATER,heater_status,0);
+                    break;
+                default:
+                    break;
+            }
+            break;
 
-    case LCD_SCEAN_SET_HEATERLVL:
-        switch(key){
-            case KEY1:
-                scean=LCD_SCEAN_MAIN;
-                break;
-            case KEY2:
-                scean=LCD_SCEAN_SET_HEATERLVL;
-                heater_status ++;
-                heater_status &= 3;
-                command_processing(CMD_SET_HEATER,heater_status,0);
-                break;
-            default:
-                break;
-        }
-        break;
-    case LCD_SCEAN_SET_FANSPEED:
-        switch(key){
-            case KEY1:
-                scean=LCD_SCEAN_MAIN;
-                break;
-            case KEY2:
-                scean=LCD_SCEAN_SET_FANSPEED;
-                if(fan_status == FAN_SPEED_HIGH)
-                      fan_status = FAN_SPEED_LOW;
-                else
-                      fan_status = FAN_SPEED_HIGH;
+        case LCD_SCEAN_SET_POWER:
+            switch(key){
+                case KEY1:
+                    scean=LCD_SCEAN_SET_POWER_PERIOD_ON;
+                    break;
+                case KEY2:
+                    scean=LCD_SCEAN_SET_POWER;
+                    power_status = !power_status;
+                    command_processing(CMD_SET_POWER,power_status,0);
+                    break;
+            }
+            break;
 
-                command_processing(CMD_SET_FANSPEED,fan_status,0);
-                break;
-            default:
-                break;
-        }
-        break;
-    default:
-        break;
+        case LCD_SCEAN_SET_POWER_PERIOD_ON:
+            switch(key){
+                case KEY1:
+                    scean=LCD_SCEAN_SET_POWER_PERIOD_OFF;
+                    break;
+                case KEY2:
+                    scean=LCD_SCEAN_SET_POWER_PERIOD_ON;
+                    power_period_on = power_period_on/5;
+                    power_period_on++;
+                    power_period_on *= 5;
+                    if (power_period_on > 50)
+                        power_period_on = 5;
+                    command_processing(CMD_SET_POWER_PERIOD_ON,power_period_on,0);
+                    break;
+            }
+            break;
+
+        case LCD_SCEAN_SET_POWER_PERIOD_OFF:
+            switch(key){
+                case KEY1:
+                    scean=LCD_SCEAN_MAIN;
+                    break;
+                case KEY2:
+                    scean=LCD_SCEAN_SET_POWER_PERIOD_OFF;
+                    power_period_off = power_period_off/5;
+                    power_period_off++;
+                    power_period_off *= 5;
+                    if (power_period_off > 50)
+                        power_period_off = 5;
+
+                    command_processing(CMD_SET_POWER_PERIOD_OFF,power_period_off,0);
+                    break;
+            }
+            break;
+
+        default:
+            break;
     }
 }
 
@@ -467,13 +541,16 @@ void loop() {
     if(timer_issue_cmd > 15){
         timer_issue_cmd = 0;
         command_processing(CMD_GET_HEATER,0,0);
-        command_processing(CMD_GET_FANSPEED,0,0);
+        command_processing(CMD_GET_POWER,0,0);
+        command_processing(CMD_GET_POWER_PERIOD_ON,0,0);
+        command_processing(CMD_GET_POWER_PERIOD_OFF,0,0);
+        command_processing(CMD_GET_POWER_TIMER,0,0);
     }
 
     /*
      * Check Key status
      */
-     key=scan_key();
+    key=scan_key();
     if(key){
         /* Any key has been pressed */
         handling_key(key);
@@ -499,7 +576,7 @@ void loop() {
         return;
     }
     blklight_count ++;
-    
+
     timer_issue_cmd ++;
     delay(100);
 }
