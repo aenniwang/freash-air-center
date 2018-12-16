@@ -43,6 +43,9 @@ http://www.arduino.cc/en/Tutorial/LiquidCrystal
 #include <nRF24L01.h>
 #include <MirfHardwareSpiDriver.h>
 #include "freashair.h"
+#include <avr/wdt.h>
+#include <avr/power.h>
+
 // initialize the library with the numbers of the interface pins
 //LiquidCrystal lcd(9, 10, 5, 4, 3, 2);
 LiquidCrystal lcd(14,10, 2, 3, 4, 5);
@@ -83,7 +86,18 @@ unsigned char comm_err;
 byte blklight_count;
 byte timer_issue_cmd; 
 
+ISR(WDT_vect){
+  setup();
+  loop();
+}
+
+void setup_wdg(){
+  wdt_enable(WDTO_4S);      
+  WDTCSR |= _BV(WDIE);  
+}
+
 void setup_24l01(){
+
     Mirf.spi = &MirfHardwareSpi;
     Mirf.init();
     Mirf.configRegister(RF_SETUP,0x27);//250Kbps
@@ -368,6 +382,7 @@ void setup(){
     comm_err = 1;
     timer_issue_cmd=255;
     blklight_count = 0;
+    setup_wdg();
 }
 
 void reset(){
@@ -385,6 +400,7 @@ void reset(){
     comm_err = 1;
     timer_issue_cmd=255;
     blklight_count = 0;
+        setup_wdg();
 }
 
 /* Show 
@@ -537,6 +553,7 @@ void handling_key(byte key){
 void loop() {
     static  byte error_count;
     byte key;
+    wdt_reset();
 
     if(timer_issue_cmd > 15){
         timer_issue_cmd = 0;
@@ -570,7 +587,7 @@ void loop() {
             lcd.setCursor(0,1);
             lcd.print(" Reseting Board ");
             reset();
-            delay(2000);
+            delay(1000);
             error_count=0;
         }
         return;

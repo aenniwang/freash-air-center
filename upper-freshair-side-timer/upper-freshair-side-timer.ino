@@ -65,11 +65,59 @@ void setup_24l01(){
 	Mirf.config();
 }
 
+void _set_heater(int num)
+{
+  switch(num) {
+    default:
+  case 0:
+      digitalWrite(HEATER_PIN0, HIGH);
+      digitalWrite(HEATER_PIN1, HIGH);
+      digitalWrite(HEATER_PIN2, HIGH);
+      break;
+      case 1:
+      digitalWrite(HEATER_PIN0, LOW);
+      digitalWrite(HEATER_PIN1, HIGH);
+      digitalWrite(HEATER_PIN2, HIGH);
+      break;
+      case 2:
+      digitalWrite(HEATER_PIN0, LOW);
+      digitalWrite(HEATER_PIN1, LOW);
+      digitalWrite(HEATER_PIN2, HIGH);
+      break;
+      case 3:
+      digitalWrite(HEATER_PIN0, LOW);
+      digitalWrite(HEATER_PIN1, LOW);
+      digitalWrite(HEATER_PIN2, LOW);
+      break;
+  }
+}
+
+int set_heater(int cur, int next)
+{
+  int i = 0;
+  int step = 1;
+  
+  if (cur == next)
+  return cur;
+
+  step = 1;
+  if (cur>next)
+    step = -1;
+
+  i = cur;
+  while(cur!=next) {
+    cur += step;
+    _set_heater(cur);
+    delay(500);
+  }
+
+  return cur;
+}
+
 void setup_heater(){
 	digitalWrite(HEATER_PIN0, LOW);
 	digitalWrite(HEATER_PIN1, LOW);
 	digitalWrite(HEATER_PIN2, HIGH);
-
 
 	delay(10);
 
@@ -109,37 +157,15 @@ void power_off()
 	power_timer = power_period_off;
 	power = POWER_OFF;
 	digitalWrite(POWER_PIN, LOW);
+  set_heater( heater_status, 0);
 }
-
 
 void power_on()
 {
 	power_timer = power_period_on;
 	power = POWER_ON;
 	digitalWrite(POWER_PIN, HIGH);
-	switch(heater_status){
-		case HEATER_1_SET:
-			digitalWrite(HEATER_PIN0, HIGH);
-			digitalWrite(HEATER_PIN1, HIGH);
-			digitalWrite(HEATER_PIN2, LOW);
-			break;
-		case HEATER_2_SET:
-			digitalWrite(HEATER_PIN0, LOW);
-			digitalWrite(HEATER_PIN1, LOW);
-			digitalWrite(HEATER_PIN2, HIGH);
-			break;
-		case HEATER_3_SET:
-			digitalWrite(HEATER_PIN0, LOW);
-			digitalWrite(HEATER_PIN1, LOW);
-			digitalWrite(HEATER_PIN2, LOW);
-			break;
-		case HEATER_0_SET:
-		default:
-			digitalWrite(HEATER_PIN0, HIGH);
-			digitalWrite(HEATER_PIN1, HIGH);
-			digitalWrite(HEATER_PIN2, HIGH);
-			break;
-	}
+  heater_status=set_heater(0, heater_status);
 }
 
 void loop(){
@@ -157,12 +183,6 @@ void loop(){
 
 	power_timer--;
 
-	/* Make sure all heater is off when power is off */
-	if (power == POWER_OFF) {
-		digitalWrite(HEATER_PIN0, HIGH);
-		digitalWrite(HEATER_PIN1, HIGH);
-		digitalWrite(HEATER_PIN2, HIGH);
-	}
 
 	if (power == POWER_ON) {
 		/* Power is on, then check if it's time to power off */
@@ -177,6 +197,10 @@ void loop(){
 			Serial.println("Power changed from OFF -> ON");
 		}
 	}
+
+  /* Make sure all heater is off when power is off */
+  if (power == POWER_OFF)
+    _set_heater( 0);
 
 	Serial.print(" -> ");
 	Serial.print(power ? "OFF" : "ON");
@@ -210,41 +234,26 @@ void loop(){
 			case CMD_SET_HEATER:
 				switch(data[1]){
 					case HEATER_1_SET:
-						if (power == POWER_ON) {
-							digitalWrite(HEATER_PIN0, HIGH);
-							digitalWrite(HEATER_PIN1, HIGH);
-							digitalWrite(HEATER_PIN2, LOW);
-						}
-						heater_status=1;
+						if (power == POWER_ON)
+              heater_status=set_heater(heater_status, 1);
 						break;
+            
 					case HEATER_2_SET:
-						if (power == POWER_ON) {
-
-							digitalWrite(HEATER_PIN0, LOW);
-							digitalWrite(HEATER_PIN1, LOW);
-							digitalWrite(HEATER_PIN2, HIGH);
-						}
-						heater_status=2;
+						if (power == POWER_ON)
+              heater_status=set_heater(heater_status, 2);
 						break;
+            
 					case HEATER_3_SET:
-						if (power == POWER_ON) {
-
-							digitalWrite(HEATER_PIN0, LOW);
-							digitalWrite(HEATER_PIN1, LOW);
-							digitalWrite(HEATER_PIN2, LOW);
-						}
-						heater_status=3;
+						if (power == POWER_ON)
+              heater_status=set_heater(heater_status, 3);
 						break;
 					case HEATER_0_SET:
 					default:
-						if (power == POWER_ON) {
-							digitalWrite(HEATER_PIN0, HIGH);
-							digitalWrite(HEATER_PIN1, HIGH);
-							digitalWrite(HEATER_PIN2, HIGH);
-						}
-						heater_status=0;
+						if (power == POWER_ON)
+	            heater_status=set_heater(heater_status, 0);
 						break;
 				}
+       
 				data[2]=CMD_STATUS_OK;
 				break;
 
