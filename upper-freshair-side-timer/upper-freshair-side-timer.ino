@@ -124,7 +124,7 @@ void setup_heater(){
 	pinMode(HEATER_PIN0,  OUTPUT);
 	pinMode(HEATER_PIN1,  OUTPUT);
 	pinMode(HEATER_PIN2,  OUTPUT);
-	heater_status = HEATER_2_SET;
+	heater_status = HEATER_1_SET;
 
 	power_period_on = MAX_POWER_PERIOD;
 	power_period_on = power_period_on * 60 *20;
@@ -209,6 +209,7 @@ void loop(){
 
 	if(!Mirf.isSending() && Mirf.dataReady()){
 		delay(50);
+    Serial.println("--");
 		static unsigned int count;
 		count++;
 		Mirf.getData((byte*)data);
@@ -229,7 +230,7 @@ void loop(){
 			Serial.println("Invalid command data");
 			return;
 		}
-
+   Serial.println("2");
 		switch(data[0]){
 			case CMD_SET_HEATER:
 				switch(data[1]){
@@ -310,8 +311,9 @@ void loop(){
 				data[2]=CMD_STATUS_INVALID;
 				break;
 		}
-
-		data[3]=data[0]+data[1]+data[2];
+   Serial.println("3");
+   
+   data[3]=data[0]+data[1]+data[2];
 		/*
 		 * Set the send address.
 		 */ 
@@ -320,8 +322,12 @@ void loop(){
 		 * Send the data back to the client.
 		 */
 		Mirf.send((byte*)data);
-		idle=0;
+		idle=0; 
+		Serial.println("4");
+
 		while(Mirf.isSending()){}
+      Serial.println("5");
+
 		delay(10);
 	} else {
 		delay(50);

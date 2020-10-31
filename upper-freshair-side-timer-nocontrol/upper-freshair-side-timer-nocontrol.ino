@@ -99,7 +99,7 @@ void setup_heater(){
 	pinMode(HEATER_PIN0,  OUTPUT);
 	pinMode(HEATER_PIN1,  OUTPUT);
 	pinMode(HEATER_PIN2,  OUTPUT);
-	heater_status = HEATER_2_SET;
+	heater_status = HEATER_0_SET;
 
 	power_period_on = MAX_POWER_PERIOD;
 	power_period_on = power_period_on * 60 * 20;

@@ -43,7 +43,9 @@ http://www.arduino.cc/en/Tutorial/LiquidCrystal
 #include <nRF24L01.h>
 #include <MirfHardwareSpiDriver.h>
 #include "freashair.h"
+#ifdef ENABLE_WDT
 #include <avr/wdt.h>
+#endif
 #include <avr/power.h>
 
 // initialize the library with the numbers of the interface pins
@@ -86,15 +88,17 @@ unsigned char comm_err;
 byte blklight_count;
 byte timer_issue_cmd; 
 
+#ifdef ENABLE_WDT
 ISR(WDT_vect){
   setup();
   loop();
 }
 
-void setup_wdg(){
+void setup_wdt(){
   wdt_enable(WDTO_4S);      
   WDTCSR |= _BV(WDIE);  
 }
+#endif
 
 void setup_24l01(){
 
@@ -382,7 +386,9 @@ void setup(){
     comm_err = 1;
     timer_issue_cmd=255;
     blklight_count = 0;
-    setup_wdg();
+#ifdef ENABLE_WDT
+    setup_wdt();
+#endif
 }
 
 void reset(){
@@ -400,7 +406,9 @@ void reset(){
     comm_err = 1;
     timer_issue_cmd=255;
     blklight_count = 0;
-        setup_wdg();
+#ifdef ENABLE_WDT
+        setup_wdt();
+#endif
 }
 
 /* Show 
@@ -553,7 +561,9 @@ void handling_key(byte key){
 void loop() {
     static  byte error_count;
     byte key;
+#ifdef ENABLE_WDT
     wdt_reset();
+#endif
 
     if(timer_issue_cmd > 15){
         timer_issue_cmd = 0;
