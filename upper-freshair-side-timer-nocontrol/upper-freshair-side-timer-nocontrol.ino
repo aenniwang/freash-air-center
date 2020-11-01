@@ -58,7 +58,10 @@ int set_heater(int cur, int next)
 {
   int i = 0;
   int step = 1;
-  
+
+  if (cur == 0)
+    _set_heater(cur);
+
   if (cur == next)
   return cur;
 
@@ -86,6 +89,7 @@ void power_off()
 
 void power_on()
 {
+  heater_status = 0;
   power_timer = power_period_on;
   power = POWER_ON;
   digitalWrite(POWER_PIN, HIGH);
